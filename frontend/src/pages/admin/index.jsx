@@ -1,0 +1,12 @@
+export { default as AdminDashboard } from './AdminDashboard';
+export { default as DocumentsRecords } from './DocumentsRecords';
+export { default as ResidentsRecords } from './ResidentsRecords';
+export { default as HouseholdRecords } from './HouseholdRecords';
+export { default as BlotterRecords } from './BlotterRecords';
+export { default as FinancialTracking } from './FinancialTracking';
+export { default as BarangayOfficials } from './BarangayOfficials';
+export { default as CommunicationAnnouncement } from './CommunicationAnnouncement';
+export { default as DisasterEmergency } from './DisasterEmergency';
+export { default as InventoryAssets } from './InventoryAssets';
+export { default as ProjectManagement } from './ProjectManagement';
+export { default as SocialServices } from './modules/SocialServices/SocialServices';
