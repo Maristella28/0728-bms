@@ -678,7 +678,7 @@ const ResidentsRecords = () => {
                           <td className="px-6 py-4"><AvatarImg avatarPath={r.avatar} /></td>
                           <td className="px-4 py-4">
                             <span className="font-mono text-green-600 bg-green-50 px-2 py-1 rounded text-xs">
-                              {r.residents_id || (r.profile && r.profile.residents_id) || "N/A"}
+                              {r.residents_id}
                             </span>
                           </td>
                           <td
