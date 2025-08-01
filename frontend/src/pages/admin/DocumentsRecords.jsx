@@ -23,6 +23,11 @@ import {
   ChevronDownIcon,
   ChevronUpIcon,
   DocumentArrowDownIcon,
+  InformationCircleIcon,
+  ExclamationCircleIcon,
+  ArrowPathIcon,
+  ClockIcon as RefreshIcon,
+  ArrowDownTrayIcon,
 } from "@heroicons/react/24/solid";
 import axios from '../../utils/axiosConfig';
 
@@ -57,6 +62,8 @@ const getDocumentTypeColor = (type) => {
       return 'bg-orange-100 text-orange-800';
     case 'Brgy Business Permit':
       return 'bg-pink-100 text-pink-800';
+    case 'Brgy Certification':
+      return 'bg-rose-100 text-rose-800';
     default:
       return 'bg-gray-100 text-gray-800';
   }
@@ -74,6 +81,8 @@ const getDocumentTypeIcon = (type) => {
       return <BuildingOfficeIcon className="w-3 h-3" />;
     case 'Brgy Business Permit':
       return <BuildingOfficeIcon className="w-3 h-3" />;
+    case 'Brgy Certification':
+      return <DocumentIcon className="w-3 h-3" />;
     default:
       return <DocumentTextIcon className="w-3 h-3" />;
   }
@@ -119,33 +128,100 @@ const DocumentsRecords = () => {
   const [loading, setLoading] = useState(false);
   const [feedback, setFeedback] = useState(null);
   const [generatingPdf, setGeneratingPdf] = useState(null);
+  const [toastMessage, setToastMessage] = useState(null);
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [refreshInterval, setRefreshInterval] = useState(30000); // 30 seconds
+  const [lastRefresh, setLastRefresh] = useState(new Date());
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Fetch document requests from backend
-  useEffect(() => {
-    const fetchRecords = async () => {
-      try {
-        const res = await axios.get('/document-requests');
-        // Map backend data to table format
-        const mapped = res.data.map((item) => ({
-          id: item.id,
-          user: item.user,
-          resident: item.resident,
-          documentType: item.document_type,
-          status: item.status.charAt(0).toUpperCase() + item.status.slice(1),
-          requestDate: item.created_at,
-          approvedDate: item.status === 'approved' ? item.updated_at : null,
-          purpose: item.fields?.purpose || '',
-          remarks: item.fields?.remarks || '',
-        }));
-        setRecords(mapped);
-        setFilteredRecords(mapped);
-      } catch (err) {
-        setRecords([]);
-        setFilteredRecords([]);
+  const fetchRecords = async (showRefreshIndicator = false) => {
+    if (showRefreshIndicator) {
+      setIsRefreshing(true);
+    }
+    
+    try {
+      const res = await axios.get('/document-requests');
+      // Map backend data to table format
+      const mapped = res.data.map((item) => ({
+        id: item.id,
+        user: item.user,
+        resident: item.resident,
+        documentType: item.document_type,
+        certificationType: item.certification_type,
+        certificationData: item.certification_data,
+        status: item.status.charAt(0).toUpperCase() + item.status.slice(1),
+        requestDate: item.created_at,
+        approvedDate: item.status === 'approved' ? item.updated_at : null,
+        completedAt: item.completed_at,
+        priority: item.priority,
+        processingNotes: item.processing_notes,
+        estimatedCompletion: item.estimated_completion,
+        purpose: item.fields?.purpose || '',
+        remarks: item.fields?.remarks || '',
+        pdfPath: item.pdf_path,
+        photoPath: item.photo_path,
+        photoType: item.photo_type,
+        photoMetadata: item.photo_metadata,
+      }));
+      setRecords(mapped);
+      setFilteredRecords(mapped);
+      setLastRefresh(new Date());
+      
+      if (showRefreshIndicator) {
+        setToastMessage({
+          type: 'success',
+          message: '🔄 Data refreshed successfully',
+          duration: 2000
+        });
       }
-    };
+    } catch (err) {
+      setRecords([]);
+      setFilteredRecords([]);
+      if (showRefreshIndicator) {
+        setToastMessage({
+          type: 'error',
+          message: '❌ Failed to refresh data',
+          duration: 3000
+        });
+      }
+    } finally {
+      if (showRefreshIndicator) {
+        setIsRefreshing(false);
+      }
+    }
+  };
+
+  // Initial data fetch
+  useEffect(() => {
     fetchRecords();
   }, []);
+
+  // Auto-refresh functionality
+  useEffect(() => {
+    if (!autoRefresh) return;
+
+    const interval = setInterval(() => {
+      fetchRecords();
+    }, refreshInterval);
+
+    return () => clearInterval(interval);
+  }, [autoRefresh, refreshInterval]);
+
+  // Manual refresh function
+  const handleManualRefresh = () => {
+    fetchRecords(true);
+  };
+
+  // Toggle auto-refresh
+  const toggleAutoRefresh = () => {
+    setAutoRefresh(!autoRefresh);
+    setToastMessage({
+      type: 'success',
+      message: `Auto-refresh ${!autoRefresh ? 'enabled' : 'disabled'}`,
+      duration: 2000
+    });
+  };
 
   // Filter records on search
   useEffect(() => {
@@ -178,35 +254,56 @@ const DocumentsRecords = () => {
 
   const handleSave = async () => {
     setLoading(true);
-    setFeedback(null);
+    setFeedback({ type: 'loading', message: 'Saving changes...' });
+    
     try {
       await axios.patch(`/document-requests/${editData.id}`, {
         status: editData.status.toLowerCase(),
+        priority: editData.priority,
+        estimated_completion: editData.estimatedCompletion,
+        processing_notes: editData.processingNotes,
         fields: {
           purpose: editData.purpose,
           remarks: editData.remarks,
         },
       });
-      setFeedback({ type: 'success', message: 'Changes saved.' });
-      setShowModal(false);
-      setEditData({});
+      
+      setFeedback({
+        type: 'success',
+        message: '✅ Document record updated successfully!',
+        details: `Status changed to ${editData.status}. All changes have been saved.`
+      });
+      
+      // Show toast notification
+      setToastMessage({
+        type: 'success',
+        message: `Document #${editData.id} updated successfully`,
+        duration: 3000
+      });
+      
+      setTimeout(() => {
+        setShowModal(false);
+        setEditData({});
+        setFeedback(null);
+      }, 1500);
+      
       // Refresh records
-      const res = await axios.get('/document-requests');
-      const mapped = res.data.map((item) => ({
-        id: item.id,
-        user: item.user,
-          resident: item.resident,
-        documentType: item.document_type,
-        status: item.status.charAt(0).toUpperCase() + item.status.slice(1),
-        requestDate: item.created_at,
-        approvedDate: item.status === 'approved' ? item.updated_at : null,
-        purpose: item.fields?.purpose || '',
-        remarks: item.fields?.remarks || '',
-      }));
-      setRecords(mapped);
-      setFilteredRecords(mapped);
+      await fetchRecords();
     } catch (err) {
-      setFeedback({ type: 'error', message: err.response?.data?.message || 'Failed to save changes.' });
+      const errorMessage = err.response?.data?.message || 'Failed to save changes.';
+      const errorCode = err.response?.status;
+      
+      setFeedback({
+        type: 'error',
+        message: `❌ ${errorMessage}`,
+        details: errorCode ? `Error Code: ${errorCode}` : 'Please check your connection and try again.'
+      });
+      
+      setToastMessage({
+        type: 'error',
+        message: 'Failed to update document record',
+        duration: 4000
+      });
     } finally {
       setLoading(false);
     }
@@ -227,35 +324,42 @@ const DocumentsRecords = () => {
 
   const handleGeneratePdf = async (record) => {
     setGeneratingPdf(record.id);
-    setFeedback(null);
+    setToastMessage({
+      type: 'loading',
+      message: `Generating PDF for ${record.documentType}...`,
+      duration: 0
+    });
+    
     try {
       const response = await axios.post(`/document-requests/${record.id}/generate-pdf`);
-      setFeedback({ type: 'success', message: 'PDF certificate generated successfully!' });
+      
+      setToastMessage({
+        type: 'success',
+        message: `🎉 PDF certificate generated successfully for ${record.user?.name || 'resident'}!`,
+        duration: 4000
+      });
       
       // Refresh records to get updated PDF path
-      const res = await axios.get('/document-requests');
-      const mapped = res.data.map((item) => ({
-        id: item.id,
-        user: item.user,
-        resident: item.resident,
-        documentType: item.document_type,
-        status: item.status.charAt(0).toUpperCase() + item.status.slice(1),
-        requestDate: item.created_at,
-        approvedDate: item.status === 'approved' ? item.updated_at : null,
-        purpose: item.fields?.purpose || '',
-        remarks: item.fields?.remarks || '',
-        pdfPath: item.pdf_path,
-      }));
-      setRecords(mapped);
-      setFilteredRecords(mapped);
+      await fetchRecords();
     } catch (err) {
-      setFeedback({ type: 'error', message: err.response?.data?.message || 'Failed to generate PDF.' });
+      const errorMessage = err.response?.data?.message || 'Failed to generate PDF.';
+      setToastMessage({
+        type: 'error',
+        message: `❌ ${errorMessage}`,
+        duration: 5000
+      });
     } finally {
       setGeneratingPdf(null);
     }
   };
 
   const handleDownloadPdf = async (record) => {
+    setToastMessage({
+      type: 'loading',
+      message: 'Preparing download...',
+      duration: 0
+    });
+    
     try {
       const response = await axios.get(`/document-requests/${record.id}/download-pdf`, {
         responseType: 'blob'
@@ -269,15 +373,111 @@ const DocumentsRecords = () => {
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
+      
+      setToastMessage({
+        type: 'success',
+        message: `📄 PDF downloaded successfully!`,
+        duration: 3000
+      });
     } catch (err) {
-      setFeedback({ type: 'error', message: 'Failed to download PDF.' });
+      setToastMessage({
+        type: 'error',
+        message: '❌ Failed to download PDF. Please try again.',
+        duration: 4000
+      });
     }
   };
+
+  const handleViewPdf = async (record) => {
+    setToastMessage({
+      type: 'loading',
+      message: 'Opening PDF...',
+      duration: 0
+    });
+    
+    try {
+      const response = await axios.get(`/document-requests/${record.id}/download-pdf`, {
+        responseType: 'blob'
+      });
+      
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+      window.open(url, '_blank', 'width=800,height=600,scrollbars=yes,resizable=yes');
+      
+      setToastMessage({
+        type: 'success',
+        message: `📄 PDF opened successfully!`,
+        duration: 3000
+      });
+      
+      // Clean up the URL after a delay
+      setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+      }, 1000);
+    } catch (err) {
+      setToastMessage({
+        type: 'error',
+        message: '❌ Failed to open PDF. Please try again.',
+        duration: 4000
+      });
+    }
+  };
+
+  // Auto-hide toast messages
+  React.useEffect(() => {
+    if (toastMessage && toastMessage.duration > 0) {
+      const timer = setTimeout(() => {
+        setToastMessage(null);
+      }, toastMessage.duration);
+      return () => clearTimeout(timer);
+    }
+  }, [toastMessage]);
+
+  // Toast Notification Component
+  const ToastNotification = ({ message, type, onClose }) => (
+    <div className={`fixed top-24 right-6 z-50 max-w-md rounded-xl shadow-2xl border-2 p-4 transition-all duration-500 transform ${
+      message ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'
+    } ${
+      type === 'success'
+        ? 'bg-gradient-to-r from-green-50 to-emerald-50 border-green-200 text-green-800'
+        : type === 'loading'
+        ? 'bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200 text-blue-800'
+        : 'bg-gradient-to-r from-red-50 to-rose-50 border-red-200 text-red-800'
+    }`}>
+      <div className="flex items-start gap-3">
+        <div className="flex-shrink-0 mt-0.5">
+          {type === 'success' && <CheckCircleIcon className="w-5 h-5 text-green-600" />}
+          {type === 'loading' && <ArrowPathIcon className="w-5 h-5 text-blue-600 animate-spin" />}
+          {type === 'error' && <ExclamationCircleIcon className="w-5 h-5 text-red-600" />}
+        </div>
+        <div className="flex-1">
+          <div className="font-semibold text-sm">{message}</div>
+        </div>
+        {type !== 'loading' && (
+          <button
+            onClick={onClose}
+            className="flex-shrink-0 text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            <XMarkIcon className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+    </div>
+  );
 
   return (
     <>
       <Navbar />
       <Sidebar />
+      
+      {/* Toast Notification */}
+      {toastMessage && (
+        <ToastNotification
+          message={toastMessage.message}
+          type={toastMessage.type}
+          onClose={() => setToastMessage(null)}
+        />
+      )}
+      
       <main className="bg-gradient-to-br from-green-50 to-white min-h-screen ml-64 pt-36 px-6 pb-16 font-sans">
         <div className="w-full max-w-7xl mx-auto space-y-8">
           {/* Enhanced Header */}
@@ -339,7 +539,33 @@ const DocumentsRecords = () => {
                 </button>
               </div>
 
-              <div className="flex gap-3 items-center w-full max-w-md">
+              <div className="flex gap-3 items-center w-full max-w-2xl">
+                {/* Auto-refresh controls */}
+                <div className="flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2 border">
+                  <button
+                    onClick={toggleAutoRefresh}
+                    className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-all duration-200 ${
+                      autoRefresh
+                        ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    <RefreshIcon className={`w-3 h-3 ${autoRefresh ? 'animate-spin' : ''}`} />
+                    Auto
+                  </button>
+                  <button
+                    onClick={handleManualRefresh}
+                    disabled={isRefreshing}
+                    className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-blue-100 text-blue-700 hover:bg-blue-200 transition-all duration-200 disabled:opacity-50"
+                  >
+                    <ArrowPathIcon className={`w-3 h-3 ${isRefreshing ? 'animate-spin' : ''}`} />
+                    Refresh
+                  </button>
+                  <span className="text-xs text-gray-500">
+                    {lastRefresh.toLocaleTimeString()}
+                  </span>
+                </div>
+
                 <div className="relative flex-grow">
                   <input
                     type="text"
@@ -462,13 +688,22 @@ const DocumentsRecords = () => {
                                       {generatingPdf === record.id ? 'Generating...' : 'Generate PDF'}
                                     </button>
                                   ) : (
-                                    <button
-                                      onClick={() => handleDownloadPdf(record)}
-                                      className="bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white px-3 py-1 rounded-lg text-xs font-semibold shadow-md flex items-center gap-1 transition-all duration-300 transform hover:scale-105"
-                                    >
-                                      <DocumentArrowDownIcon className="w-3 h-3" />
-                                      Download
-                                    </button>
+                                    <>
+                                      <button
+                                        onClick={() => handleViewPdf(record)}
+                                        className="bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white px-3 py-1 rounded-lg text-xs font-semibold shadow-md flex items-center gap-1 transition-all duration-300 transform hover:scale-105"
+                                      >
+                                        <EyeIcon className="w-3 h-3" />
+                                        View PDF
+                                      </button>
+                                      <button
+                                        onClick={() => handleDownloadPdf(record)}
+                                        className="bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white px-3 py-1 rounded-lg text-xs font-semibold shadow-md flex items-center gap-1 transition-all duration-300 transform hover:scale-105"
+                                      >
+                                        <DocumentArrowDownIcon className="w-3 h-3" />
+                                        Download
+                                      </button>
+                                    </>
                                   )}
                                 </>
                               )}
@@ -489,13 +724,50 @@ const DocumentsRecords = () => {
                                       </h4>
                                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                                         <div><span className="font-medium text-gray-700">Document Type:</span> <span className="text-gray-900">{selectedRecord.documentType}</span></div>
+                                        {selectedRecord.certificationType && (
+                                          <div><span className="font-medium text-gray-700">Certification Type:</span> <span className="text-gray-900">{selectedRecord.certificationType}</span></div>
+                                        )}
                                         <div><span className="font-medium text-gray-700">Status:</span> <span className="text-gray-900">{selectedRecord.status}</span></div>
+                                        {selectedRecord.priority && (
+                                          <div><span className="font-medium text-gray-700">Priority:</span> <span className="text-gray-900 capitalize">{selectedRecord.priority}</span></div>
+                                        )}
                                         <div><span className="font-medium text-gray-700">Request Date:</span> <span className="text-gray-900">{formatDate(selectedRecord.requestDate)}</span></div>
                                         <div><span className="font-medium text-gray-700">Approved Date:</span> <span className="text-gray-900">{formatDate(selectedRecord.approvedDate)}</span></div>
+                                        {selectedRecord.completedAt && (
+                                          <div><span className="font-medium text-gray-700">Completed Date:</span> <span className="text-gray-900">{formatDate(selectedRecord.completedAt)}</span></div>
+                                        )}
+                                        {selectedRecord.estimatedCompletion && (
+                                          <div><span className="font-medium text-gray-700">Estimated Completion:</span> <span className="text-gray-900">{formatDate(selectedRecord.estimatedCompletion)}</span></div>
+                                        )}
                                         <div><span className="font-medium text-gray-700">Purpose:</span> <span className="text-gray-900">{selectedRecord.purpose}</span></div>
                                         <div><span className="font-medium text-gray-700">Remarks:</span> <span className="text-gray-900">{selectedRecord.remarks}</span></div>
+                                        {selectedRecord.processingNotes && (
+                                          <div className="md:col-span-2"><span className="font-medium text-gray-700">Processing Notes:</span> <span className="text-gray-900">{selectedRecord.processingNotes}</span></div>
+                                        )}
                                       </div>
+                                      
+                                      {/* Certification-specific data */}
+                                      {selectedRecord.certificationData && Object.keys(selectedRecord.certificationData).length > 0 && (
+                                        <div className="mt-4 pt-4 border-t border-green-200">
+                                          <h5 className="text-md font-semibold text-green-800 mb-3">Certification Details</h5>
+                                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                                            {selectedRecord.certificationData.child_name && (
+                                              <div><span className="font-medium text-gray-700">Child's Name:</span> <span className="text-gray-900">{selectedRecord.certificationData.child_name}</span></div>
+                                            )}
+                                            {selectedRecord.certificationData.child_birth_date && (
+                                              <div><span className="font-medium text-gray-700">Child's Birth Date:</span> <span className="text-gray-900">{formatDate(selectedRecord.certificationData.child_birth_date)}</span></div>
+                                            )}
+                                            {selectedRecord.certificationData.registration_office && (
+                                              <div><span className="font-medium text-gray-700">Registration Office:</span> <span className="text-gray-900">{selectedRecord.certificationData.registration_office}</span></div>
+                                            )}
+                                            {selectedRecord.certificationData.registration_date && (
+                                              <div><span className="font-medium text-gray-700">Registration Date:</span> <span className="text-gray-900">{formatDate(selectedRecord.certificationData.registration_date)}</span></div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      )}
                                     </div>
+
 
                                     {/* Resident Information Card */}
                                     <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-200">
@@ -511,7 +783,7 @@ const DocumentsRecords = () => {
                                         <div><span className="font-medium text-gray-700">Gender:</span> <span className="text-gray-900">{selectedRecord.resident?.sex || 'N/A'}</span></div>
                                         <div><span className="font-medium text-gray-700">Contact Number:</span> <span className="text-gray-900">{selectedRecord.resident?.contact_number || 'N/A'}</span></div>
                                         <div><span className="font-medium text-gray-700">Email:</span> <span className="text-gray-900">{selectedRecord.resident?.email || 'N/A'}</span></div>
-                                        <div><span className="font-medium text-gray-700">Address:</span> <span className="text-gray-900">{selectedRecord.resident?.full_address || 'N/A'}</span></div>
+                                        <div><span className="font-medium text-gray-700">Address:</span> <span className="text-gray-900">{selectedRecord.resident?.current_address || 'N/A'}</span></div>
                                         <div><span className="font-medium text-gray-700">Birth Date:</span> <span className="text-gray-900">{selectedRecord.resident?.birth_date ? formatDate(selectedRecord.resident.birth_date) : 'N/A'}</span></div>
                                         <div><span className="font-medium text-gray-700">Birth Place:</span> <span className="text-gray-900">{selectedRecord.resident?.birth_place || 'N/A'}</span></div>
                                         <div><span className="font-medium text-gray-700">Religion:</span> <span className="text-gray-900">{selectedRecord.resident?.religion || 'N/A'}</span></div>
@@ -568,6 +840,7 @@ const DocumentsRecords = () => {
                       <option value="Brgy Indigency">Brgy Indigency</option>
                       <option value="Brgy Residency">Brgy Residency</option>
                       <option value="Brgy Business Permit">Brgy Business Permit</option>
+                      <option value="Brgy Certification">Brgy Certification</option>
                     </select>
                   </div>
                   <div>
@@ -604,6 +877,38 @@ const DocumentsRecords = () => {
                       placeholder="Enter remarks"
                     />
                   </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Priority</label>
+                    <select
+                      value={editData.priority || 'normal'}
+                      onChange={(e) => setEditData({...editData, priority: e.target.value})}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-300"
+                    >
+                      <option value="low">Low</option>
+                      <option value="normal">Normal</option>
+                      <option value="high">High</option>
+                      <option value="urgent">Urgent</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Estimated Completion</label>
+                    <input
+                      type="date"
+                      value={editData.estimatedCompletion ? new Date(editData.estimatedCompletion).toISOString().split('T')[0] : ''}
+                      onChange={(e) => setEditData({...editData, estimatedCompletion: e.target.value})}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-300"
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Processing Notes</label>
+                    <textarea
+                      value={editData.processingNotes || ''}
+                      onChange={(e) => setEditData({...editData, processingNotes: e.target.value})}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-300"
+                      placeholder="Enter processing notes"
+                      rows={3}
+                    />
+                  </div>
                 </div>
 
                 <div className="flex justify-end gap-3 pt-4">
@@ -622,7 +927,27 @@ const DocumentsRecords = () => {
                   </button>
                 </div>
                 {feedback && (
-                  <div className={`text-sm mt-2 ${feedback.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>{feedback.message}</div>
+                  <div className={`rounded-xl p-4 mt-4 border-2 transition-all duration-300 ${
+                    feedback.type === 'success'
+                      ? 'bg-gradient-to-r from-green-50 to-emerald-50 border-green-200 text-green-800'
+                      : feedback.type === 'loading'
+                      ? 'bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200 text-blue-800'
+                      : 'bg-gradient-to-r from-red-50 to-rose-50 border-red-200 text-red-800'
+                  }`}>
+                    <div className="flex items-start gap-3">
+                      <div className="flex-shrink-0 mt-0.5">
+                        {feedback.type === 'success' && <CheckCircleIcon className="w-5 h-5 text-green-600" />}
+                        {feedback.type === 'loading' && <ArrowPathIcon className="w-5 h-5 text-blue-600 animate-spin" />}
+                        {feedback.type === 'error' && <ExclamationCircleIcon className="w-5 h-5 text-red-600" />}
+                      </div>
+                      <div className="flex-1">
+                        <div className="font-semibold text-base">{feedback.message}</div>
+                        {feedback.details && (
+                          <div className="text-sm opacity-80 mt-1">{feedback.details}</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 )}
               </div>
             </div>

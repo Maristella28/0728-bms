@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Barangay Business Permit</title>
+    <title>Solo Parent Certification</title>
     <style>
         @page {
             margin: 0;
@@ -27,8 +27,8 @@
         .header {
             text-align: center;
             padding: 40px 20px 20px;
-            border-bottom: 3px solid #007bff;
-            background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+            border-bottom: 3px solid #e91e63;
+            background: linear-gradient(135deg, #e91e63 0%, #c2185b 100%);
             color: white;
         }
         .header h1 {
@@ -51,7 +51,7 @@
         .certificate-title {
             font-size: 32px;
             font-weight: bold;
-            color: #007bff;
+            color: #e91e63;
             margin-bottom: 40px;
             text-transform: uppercase;
             letter-spacing: 3px;
@@ -65,9 +65,9 @@
             margin-left: auto;
             margin-right: auto;
         }
-        .business-info {
+        .parent-info {
             background: #f8f9fa;
-            border: 2px solid #007bff;
+            border: 2px solid #e91e63;
             border-radius: 10px;
             padding: 30px;
             margin: 30px 0;
@@ -90,6 +90,23 @@
             flex: 1;
             text-align: right;
         }
+        .child-section {
+            margin: 30px 0;
+            text-align: left;
+        }
+        .child-label {
+            font-weight: bold;
+            color: #495057;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+        .child-info {
+            background: #fff3e0;
+            border: 2px solid #ff9800;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 15px;
+        }
         .purpose-section {
             margin: 30px 0;
             text-align: left;
@@ -103,7 +120,7 @@
             background: #e9ecef;
             padding: 15px;
             border-radius: 5px;
-            border-left: 4px solid #007bff;
+            border-left: 4px solid #e91e63;
         }
         .signature-section {
             margin-top: 60px;
@@ -138,17 +155,17 @@
             transform: translateY(-50%);
             width: 100px;
             height: 100px;
-            border: 3px solid #007bff;
+            border: 3px solid #e91e63;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            background: rgba(0, 123, 255, 0.1);
+            background: rgba(233, 30, 99, 0.1);
         }
         .stamp-text {
             font-size: 10px;
             font-weight: bold;
-            color: #007bff;
+            color: #e91e63;
             text-align: center;
             text-transform: uppercase;
         }
@@ -178,84 +195,67 @@
 <body>
     <div class="certificate-container">
         <div class="certificate-number">
-            Permit No: {{ $documentRequest->id ?? 'N/A' }}
+            Certificate No: {{ $documentRequest->id ?? 'N/A' }}
         </div>
         
         <div class="header">
             <h1>Republic of the Philippines</h1>
-            <h2>Province of [Province]</h2>
-            <h2>Municipality of [Municipality]</h2>
-            <h2>Barangay [Barangay Name]</h2>
+            <h2>Province of Laguna</h2>
+            <h2>City of Cabuyao</h2>
+            <h2>Barangay Mamatid</h2>
+            <h2>Office of the Barangay Chairman</h2>
         </div>
 
         <div class="content">
-            <div class="certificate-title">Barangay Business Permit</div>
+            <div class="certificate-title">Certification</div>
             
             <div class="certificate-text">
-                TO WHOM IT MAY CONCERN:
-            </div>
-            
-            <div class="certificate-text">
-                This is to certify that <strong>{{ $documentRequest->fields['businessOwner'] ?? ($resident->first_name . ' ' . $resident->last_name) }}</strong> 
-                is hereby granted permission to operate the business known as <strong>{{ $documentRequest->fields['businessName'] ?? 'N/A' }}</strong> 
-                within the jurisdiction of Barangay [Barangay Name].
+                <strong>To Whom It May Concern:</strong>
             </div>
             
             <div class="certificate-text">
-                This permit is issued in accordance with the barangay ordinances and regulations governing business operations within our jurisdiction.
+                This is to certify that as per record kept in this office that <strong>{{ $resident->first_name . ' ' . ($resident->middle_name ? $resident->middle_name . ' ' : '') . $resident->last_name . ($resident->name_suffix ? ' ' . $resident->name_suffix : '') }}</strong>,
+                is a resident of our Barangay particularly residing at {{ $resident->current_address ?? $resident->full_address ?? 'N/A' }}.
+                That he/she is living in this Barangay.
+            </div>
+            
+            <div class="certificate-text">
+                This further certifies that the above-mentioned person is solo parent to:
             </div>
 
-            <div class="business-info">
-                <div class="info-row">
-                    <span class="info-label">Business Name:</span>
-                    <span class="info-value">{{ $documentRequest->fields['businessName'] ?? 'N/A' }}</span>
+            <div class="child-section">
+                <div class="child-info">
+                    <div class="info-row">
+                        <span class="info-label">1. {{ $documentRequest->certification_data['child_name'] ?? $documentRequest->fields['childName'] ?? 'CHILD NAME' }}</span>
+                        <span class="info-value">- Born on {{
+                            ($documentRequest->certification_data['child_birth_date'] ?? $documentRequest->fields['childBirthDate'])
+                            ? \Carbon\Carbon::parse($documentRequest->certification_data['child_birth_date'] ?? $documentRequest->fields['childBirthDate'])->format('F j, Y')
+                            : 'BIRTH DATE'
+                        }}</span>
+                    </div>
                 </div>
-                <div class="info-row">
-                    <span class="info-label">Business Owner:</span>
-                    <span class="info-value">{{ $documentRequest->fields['businessOwner'] ?? ($resident->first_name . ' ' . $resident->last_name) }}</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Business Address:</span>
-                    <span class="info-value">{{ $resident->current_address ?? 'N/A' }}</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Contact Number:</span>
-                    <span class="info-value">{{ $resident->contact_number ?? 'N/A' }}</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Email Address:</span>
-                    <span class="info-value">{{ $resident->email ?? 'N/A' }}</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Permit Amount:</span>
-                    <span class="info-value">₱{{ number_format($documentRequest->fields['amount'] ?? 0, 2) }}</span>
-                </div>
-            </div>
-
-            <div class="purpose-section">
-                <div class="purpose-label">Business Purpose:</div>
-                <div class="purpose-value">{{ $documentRequest->fields['purpose'] ?? 'Business operations' }}</div>
             </div>
 
             <div class="certificate-text">
-                This permit is valid for one (1) year from the date of issuance and must be renewed annually.
+                This certification is issued upon the request of <strong>{{ $resident->first_name . ' ' . ($resident->middle_name ? $resident->middle_name . ' ' : '') . $resident->last_name . ($resident->name_suffix ? ' ' . $resident->name_suffix : '') }}</strong>,
+                is for <strong>{{ $documentRequest->fields['purpose'] ?? 'Solo Parent Membership | Renewal Application | Requirement' }}</strong> purposes.
             </div>
 
             <div class="certificate-text">
-                Issued this <strong>{{ \Carbon\Carbon::now()->format('jS \d\a\y \of F, Y') }}</strong> at Barangay [Barangay Name], [Municipality], [Province], Philippines.
+                Given this <strong>{{ \Carbon\Carbon::now()->format('jS \d\a\y \of F Y') }}</strong> at Barangay Mamatid, City of Cabuyao, Laguna
             </div>
 
             <div class="signature-section">
                 <div class="signature-box">
                     <div class="signature-line"></div>
-                    <div class="signature-name">HON. [BARANGAY CAPTAIN NAME]</div>
-                    <div class="signature-title">Barangay Captain</div>
+                    <div class="signature-name">HON. ERNANI G. HIMPISAO</div>
+                    <div class="signature-title">Punong Barangay</div>
+                    <div class="signature-title">Mamatid, City of Cabuyao, Laguna</div>
                 </div>
-                <div class="signature-box">
-                    <div class="signature-line"></div>
-                    <div class="signature-name">[TREASURER NAME]</div>
-                    <div class="signature-title">Barangay Treasurer</div>
-                </div>
+            </div>
+
+            <div style="position: absolute; bottom: 100px; left: 40px; font-size: 12px; font-style: italic; color: #6c757d;">
+                *not valid without official seal
             </div>
         </div>
 
@@ -266,9 +266,9 @@
         </div>
 
         <div class="footer">
-            <p>This permit must be displayed prominently at the business location.</p>
-            <p>For inquiries, please contact the Barangay Office at [Contact Number]</p>
+            <p>This certification is valid for official purposes.</p>
+            <p>For verification, please contact the Barangay Office</p>
         </div>
     </div>
 </body>
-</html> 
+</html>

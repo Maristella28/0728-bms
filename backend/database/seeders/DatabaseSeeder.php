@@ -52,6 +52,11 @@ class DatabaseSeeder extends Seeder
             ]
         );
 
+        // Call other seeders
+        // $this->call([
+        //     CertificationSeeder::class,
+        // ]);
+
         // \App\Models\User::factory(10)->create();
     }
 }

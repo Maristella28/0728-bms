@@ -20,15 +20,34 @@ const Navbares = () => {
 
   const avatarUrl = useMemo(() => {
     const timestamp = new Date().getTime();
+    
+    // DEBUG: Log avatar resolution
+    console.log('Navbares avatar debug:', {
+      user_exists: !!user,
+      user_profile_exists: !!user?.profile,
+      avatar_value: user?.profile?.avatar,
+      current_photo_value: user?.profile?.current_photo,
+      full_user_object: user,
+      timestamp: timestamp
+    });
+    
     if (user?.profile?.avatar) {
-      return `http://localhost:8000/storage/${user.profile.avatar}?t=${timestamp}`;
+      const url = `http://localhost:8000/storage/${user.profile.avatar}?t=${timestamp}`;
+      console.log('Generated avatar URL:', url);
+      return url;
     }
+    console.log('Using default avatar');
     return defaultAvatar;
-  }, [user?.profile?.avatar]);
+  }, [user?.profile?.avatar, user?.profile]);
 
   useEffect(() => {
     fetchUser && fetchUser();
   }, []);
+
+  // Force re-render when user data changes
+  useEffect(() => {
+    console.log('Navbares user data changed:', user);
+  }, [user]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {

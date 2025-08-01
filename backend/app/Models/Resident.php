@@ -31,7 +31,8 @@ class Resident extends Model
         'contact_number',
         'landline_number',
         'avatar', // 🔁 replaced 'current_photo'
-        'full_address',
+        'current_address',
+        'full_address', // Add missing field that exists in database
         'years_in_barangay',
         'voter_status',
         'voters_id_number',

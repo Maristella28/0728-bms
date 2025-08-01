@@ -17,7 +17,7 @@ class PdfService
                 throw new \Exception('DomPDF package is not installed or not properly configured.');
             }
 
-            $template = $this->getTemplateName($documentRequest->document_type);
+            $template = $this->getTemplateName($documentRequest->document_type, $documentRequest->certification_type);
             
             // Check if template exists
             if (!view()->exists("certificates.{$template}")) {
@@ -26,7 +26,19 @@ class PdfService
             
             $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView("certificates.{$template}", [
                 'documentRequest' => $documentRequest,
-                'resident' => $resident
+                'resident' => $resident,
+                'certificationData' => $documentRequest->certification_data ?? [],
+                'data' => array_merge(
+                    $documentRequest->fields ?? [],
+                    $documentRequest->certification_data ?? [],
+                    [
+                        'fullName' => $resident->first_name . ' ' . ($resident->middle_name ? $resident->middle_name . ' ' : '') . $resident->last_name . ($resident->name_suffix ? ' ' . $resident->name_suffix : ''),
+                        'address' => $resident->current_address ?? $resident->full_address,
+                        'age' => $resident->age,
+                        'dateOfBirth' => $resident->birth_date,
+                        'civilStatus' => $resident->civil_status,
+                    ]
+                )
             ]);
             
             $pdf->setPaper('A4', 'portrait');
@@ -64,13 +76,32 @@ class PdfService
         }
     }
     
-    private function getTemplateName($documentType)
+    private function getTemplateName($documentType, $certificationType = null)
     {
+        // Handle Brgy Certification with specific templates
+        if ($documentType === 'Brgy Certification' && $certificationType) {
+            $certificationTemplates = [
+                'Solo Parent Certification' => 'brgy-certification-solo-parent',
+                'Delayed Registration of Birth Certificate' => 'brgy-certification-delayed-registration',
+                'First Time Job Seeker' => 'brgy-certification-first-time-jobseeker',
+                // Add more specific certification templates as needed
+            ];
+            
+            // Return specific template if available, otherwise use general certification template
+            if (isset($certificationTemplates[$certificationType])) {
+                return $certificationTemplates[$certificationType];
+            }
+            
+            return 'brgy-certification';
+        }
+        
+        // Handle other document types
         $templates = [
             'Brgy Clearance' => 'brgy-clearance',
             'Brgy Business Permit' => 'brgy-business-permit',
             'Brgy Indigency' => 'brgy-indigency',
             'Brgy Residency' => 'brgy-residency',
+            'Brgy Certification' => 'brgy-certification',
         ];
         
         return $templates[$documentType] ?? 'brgy-clearance';
@@ -92,6 +123,11 @@ class PdfService
             throw new \Exception('Certificate file not found: ' . $path);
         }
         
-        return Storage::disk('public')->download($path);
+        $fullPath = storage_path('app/public/' . $path);
+        $filename = basename($path);
+        
+        return response()->download($fullPath, $filename, [
+            'Content-Type' => 'application/pdf',
+        ]);
     }
 } 

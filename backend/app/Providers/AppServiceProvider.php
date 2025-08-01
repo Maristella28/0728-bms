@@ -3,6 +3,8 @@
 namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
+use App\Models\DocumentRequest;
+use App\Observers\DocumentRequestObserver;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -23,6 +25,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot()
     {
-        //
+        // Register model observers
+        DocumentRequest::observe(DocumentRequestObserver::class);
     }
 }

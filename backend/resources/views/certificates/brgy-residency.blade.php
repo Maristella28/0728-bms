@@ -198,7 +198,7 @@
             <div class="certificate-text">
                 This is to certify that <strong>{{ $documentRequest->fields['fullName'] ?? ($resident->first_name . ' ' . $resident->last_name) }}</strong>, 
                 of legal age, {{ $resident->civil_status ?? '' }}, {{ $resident->nationality ?? 'Filipino' }}, 
-                is a bonafide resident of <strong>{{ $documentRequest->fields['address'] ?? $resident->full_address }}</strong> 
+                is a bonafide resident of <strong>{{ $documentRequest->fields['address'] ?? $resident->current_address }}</strong>
                 within the jurisdiction of Barangay [Barangay Name].
             </div>
             
@@ -229,7 +229,7 @@
                 </div>
                 <div class="info-row">
                     <span class="info-label">Complete Address:</span>
-                    <span class="info-value">{{ $documentRequest->fields['address'] ?? $resident->full_address }}</span>
+                    <span class="info-value">{{ $documentRequest->fields['address'] ?? $resident->current_address }}</span>
                 </div>
                 <div class="info-row">
                     <span class="info-label">Years of Residency:</span>

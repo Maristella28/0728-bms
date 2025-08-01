@@ -22,8 +22,7 @@ const formatDate = (dateString) => {
 
 const Profile = () => {
   const navigate = useNavigate();
-  const { refreshUser } = useAuth();
-  const { fetchUser } = useAuth();
+  const { fetchUser, forceRefresh } = useAuth();
 
   const [form, setForm] = useState({
     first_name: '', middle_name: '', last_name: '', name_suffix: 'none',
@@ -60,6 +59,10 @@ const Profile = () => {
         return;
       }
       const res = await axiosInstance.get('/profile');
+      
+      // DEBUG: Log the profile response
+      console.log('Profile fetchProfile response:', res.data);
+      
       // Robustly extract profile from possible response shapes
       let profile = null;
       if (res.data?.user?.profile) {
@@ -69,22 +72,34 @@ const Profile = () => {
       } else if (res.data) {
         profile = res.data;
       }
+      
+      console.log('Profile extracted profile data:', profile);
+      console.log('Profile avatar value:', profile?.avatar);
+      
       if (profile) {
-        setForm(prev => ({
-          ...prev,
-          ...profile,
-          birth_date: formatDate(profile.birth_date),
-          special_categories: Array.isArray(profile.special_categories) ? profile.special_categories : [],
-          vaccine_received: Array.isArray(profile.vaccine_received) ? profile.vaccine_received : [],
-          head_of_family: !!profile.head_of_family,
-          business_outside_barangay: !!profile.business_outside_barangay,
-        }));
+        setForm(prev => {
+          const updatedForm = {
+            ...prev,
+            ...profile,
+            birth_date: formatDate(profile.birth_date),
+            special_categories: Array.isArray(profile.special_categories) ? profile.special_categories : [],
+            vaccine_received: Array.isArray(profile.vaccine_received) ? profile.vaccine_received : [],
+            head_of_family: !!profile.head_of_family,
+            business_outside_barangay: !!profile.business_outside_barangay,
+          };
+          
+          console.log('Profile final form data:', updatedForm);
+          console.log('Profile final avatar:', updatedForm.avatar);
+          
+          return updatedForm;
+        });
         setIsEditing(false);
       } else {
         setError(null);
         setIsEditing(true);
       }
     } catch (err) {
+      console.error('Profile fetchProfile error:', err);
       if (err.response?.status === 401) {
         setError('Session expired. Please login again.');
       } else if (err.response?.status === 404) {
@@ -146,39 +161,43 @@ const Profile = () => {
           formData.append(key, value);
         }
       });
-      if (form.residents_id) {
-        formData.append('_method', 'PUT');
+      // Simplified update logic - the backend handles create vs update automatically
+      try {
+        console.log('Attempting to save profile...');
         const updateRes = await axiosInstance.post('/profile/update', formData);
-        setSuccess('Profile updated successfully!');
+        
+        console.log('Profile save response:', updateRes.data);
+        
         // Update residentId in localStorage if present in response
         if (updateRes.data?.resident?.residents_id) {
           localStorage.setItem('residentId', updateRes.data.resident.residents_id);
         }
-      } else {
-        try {
-          const createResponse = await axiosInstance.post('/residents/complete-profile', formData);
-          const newId = createResponse.data?.resident?.residents_id || createResponse.data?.residents_id;
+        
+        // Set appropriate success message
+        if (updateRes.data?.message?.includes('created')) {
+          const newId = updateRes.data?.resident?.residents_id || updateRes.data?.residents_id;
           if (newId) {
-            localStorage.setItem('residentId', newId);
             setSuccess(`Profile created! Your Resident ID: ${newId}`);
           } else {
             setSuccess('Profile created successfully!');
           }
-        } catch (error) {
-          const errMsg = error.response?.data?.errors
-            ? Object.values(error.response.data.errors)[0][0]
-            : error.response?.data?.message || 'Error saving profile. Please try again.';
-          if (errMsg.includes('already has a resident profile')) {
-            await fetchProfile();
-            setIsEditing(false);
-          }
-          setError(errMsg);
-          setSubmitting(false);
-          return;
+        } else {
+          setSuccess('Profile updated successfully!');
         }
+        
+      } catch (error) {
+        console.error('Profile save error:', error);
+        const errMsg = error.response?.data?.errors
+          ? Object.values(error.response.data.errors)[0][0]
+          : error.response?.data?.message || 'Error saving profile. Please try again.';
+        setError(errMsg);
+        setSubmitting(false);
+        return;
       }
+      // Force refresh user data to update navbar avatar
+      await forceRefresh();
       await fetchProfile();
-      await fetchUser();
+      
       setIsEditing(false);
       setTimeout(() => setSuccess(null), 5000);
     } catch (error) {
@@ -311,28 +330,37 @@ const Profile = () => {
   );
 };
 
-const ReadOnlyView = ({ form, setIsEditing }) => (
-  <div className="flex flex-col items-center">
-    {/* Profile Header Section */}
-    <div className="bg-gradient-to-r from-green-50 to-emerald-50 p-8 rounded-2xl border border-green-100 shadow-lg w-full mb-8">
-      <div className="flex flex-col items-center space-y-6">
-        {/* Avatar */}
-        <div className="relative">
-          <img
-            src={
-              form.avatar
-                ? (typeof form.avatar === 'string'
-                    ? `http://localhost:8000/storage/${form.avatar}?t=${Date.now()}`
-                    : URL.createObjectURL(form.avatar))
-                : '/default-avatar.png'
-            }
-            alt="Avatar"
-            className="w-32 h-32 object-cover rounded-full border-4 border-green-300 shadow-xl"
-          />
-          <div className="absolute -bottom-2 -right-2 bg-green-500 rounded-full p-2 shadow-lg">
-            <User className="w-4 h-4 text-white" />
+const ReadOnlyView = ({ form, setIsEditing }) => {
+  // Create a dynamic timestamp for cache-busting that updates when form.avatar changes
+  const avatarTimestamp = React.useMemo(() => Date.now(), [form.avatar]);
+  
+  return (
+    <div className="flex flex-col items-center">
+      {/* Profile Header Section */}
+      <div className="bg-gradient-to-r from-green-50 to-emerald-50 p-8 rounded-2xl border border-green-100 shadow-lg w-full mb-8">
+        <div className="flex flex-col items-center space-y-6">
+          {/* Avatar */}
+          <div className="relative">
+            <img
+              src={
+                form.avatar
+                  ? (typeof form.avatar === 'string'
+                      ? `http://localhost:8000/storage/${form.avatar}?t=${avatarTimestamp}`
+                      : URL.createObjectURL(form.avatar))
+                  : 'https://flowbite.com/docs/images/people/profile-picture-5.jpg'
+              }
+              alt="Avatar"
+              className="w-32 h-32 object-cover rounded-full border-4 border-green-300 shadow-xl"
+              onError={(e) => {
+                console.log('ReadOnlyView avatar load error:', e.target.src);
+                e.target.onerror = null;
+                e.target.src = 'https://flowbite.com/docs/images/people/profile-picture-5.jpg';
+              }}
+            />
+            <div className="absolute -bottom-2 -right-2 bg-green-500 rounded-full p-2 shadow-lg">
+              <User className="w-4 h-4 text-white" />
+            </div>
           </div>
-        </div>
 
         {/* Name and ID */}
         <div className="text-center space-y-3">
@@ -524,8 +552,9 @@ const ReadOnlyView = ({ form, setIsEditing }) => (
         <div className="absolute -right-2 -top-2 w-4 h-4 bg-yellow-400 rounded-full animate-pulse"></div>
       </button>
     </div>
-  </div>
-);
+    </div>
+  );
+};
 
 // Enhanced InfoCard component for better visual presentation
 const InfoCard = ({ icon, label, value, fullWidth = false }) => (
@@ -1123,35 +1152,3 @@ const EditableForm = ({ form, handleChange, handleSubmit, setIsEditing, submitti
 );
 
 export default Profile;
-
-// Add custom CSS animations for decorative elements
-const style = document.createElement('style');
-style.textContent = `
-  @keyframes blob {
-    0% {
-      transform: translate(0px, 0px) scale(1);
-    }
-    33% {
-      transform: translate(30px, -50px) scale(1.1);
-    }
-    66% {
-      transform: translate(-20px, 20px) scale(0.9);
-    }
-    100% {
-      transform: translate(0px, 0px) scale(1);
-    }
-  }
-  
-  .animate-blob {
-    animation: blob 7s infinite;
-  }
-  
-  .animation-delay-2000 {
-    animation-delay: 2s;
-  }
-  
-  .animation-delay-4000 {
-    animation-delay: 4s;
-  }
-`;
-document.head.appendChild(style);

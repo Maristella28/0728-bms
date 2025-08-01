@@ -24,6 +24,33 @@ use App\Http\Controllers\DocumentRequestController;
 |--------------------------------------------------------------------------
 */
 
+// Test route to verify API is working
+Route::get('/test-connection', function() {
+    return response()->json([
+        'message' => 'API connection is working',
+        'timestamp' => now(),
+        'server_status' => 'OK'
+    ]);
+});
+
+// Profile fallback route for debugging (outside auth middleware)
+Route::get('/profile-debug', function(Request $request) {
+    $authHeader = $request->header('Authorization');
+    $token = null;
+    if ($authHeader && str_starts_with($authHeader, 'Bearer ')) {
+        $token = substr($authHeader, 7);
+    }
+    
+    return response()->json([
+        'message' => 'Profile debug endpoint',
+        'has_auth_header' => !empty($authHeader),
+        'token_present' => !empty($token),
+        'token_length' => $token ? strlen($token) : 0,
+        'headers' => $request->headers->all(),
+        'timestamp' => now()
+    ]);
+});
+
 // 🔐 Authentication
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']); // Returns Bearer token
@@ -165,15 +192,23 @@ Route::middleware(['auth:sanctum', 'throttle:200,1'])->group(function () {
     |--------------------------------------------------------------------------
     */
 
-    // 👤 Resident: Own profile
+    // 👤 Resident: Own profile - Fixed routing
     Route::prefix('profile')->group(function () {
         Route::get('/', [ResidentProfileController::class, 'show']);
-        Route::match(['post', 'put'], '/update', [ResidentProfileController::class, 'update']);
+        Route::post('/update', [ResidentProfileController::class, 'update']);
+        Route::put('/update', [ResidentProfileController::class, 'update']);
+        Route::patch('/update', [ResidentProfileController::class, 'update']);
     });
+    
+    // Additional direct profile routes for compatibility
+    Route::post('/profile/update', [ResidentProfileController::class, 'update']);
+    Route::put('/profile/update', [ResidentProfileController::class, 'update']);
+    Route::patch('/profile/update', [ResidentProfileController::class, 'update']);
 
     // 🆕 Resident: Complete first-time profile (Authenticated only)
     Route::post('/residents/complete-profile', [ResidentProfileController::class, 'store']);
-Route::get('/residents/my-profile', [ResidentController::class, 'myProfile']);
+    Route::put('/residents/complete-profile', [ResidentProfileController::class, 'store']);
+    Route::get('/residents/my-profile', [ResidentController::class, 'myProfile']);
 
     // 🧾 Authenticated users (incl. admin): Read residents
     Route::get('/residents', [ResidentProfileController::class, 'index']);
@@ -182,8 +217,10 @@ Route::get('/residents/my-profile', [ResidentController::class, 'myProfile']);
     // 🔔 Notifications
     Route::get('/notifications', function (Request $request) {
         // Return notifications for the authenticated user
+        $user = $request->user();
+        $notifications = $user->notifications ?? collect();
         return response()->json([
-            'notifications' => $request->user()->notifications
+            'notifications' => $notifications
         ]);
     });
     Route::patch('/notifications/{id}/read', [NotificationController::class, 'markAsRead']);
@@ -224,6 +261,60 @@ Route::get('/residents/my-profile', [ResidentController::class, 'myProfile']);
     Route::post('/document-requests/{id}/generate-pdf', [App\Http\Controllers\DocumentRequestController::class, 'generatePdf']); // Generate PDF
     Route::get('/document-requests/{id}/download-pdf', [App\Http\Controllers\DocumentRequestController::class, 'downloadPdf']); // Download PDF
     Route::get('/test-pdf', [App\Http\Controllers\DocumentRequestController::class, 'testPdf']); // Test PDF system
+    
+    // Photo management for document requests
+    Route::get('/document-requests/{id}/photo', [App\Http\Controllers\DocumentRequestController::class, 'viewPhoto']); // View uploaded photo
+    Route::get('/document-requests/{id}/download-photo', [App\Http\Controllers\DocumentRequestController::class, 'downloadPhoto']); // Download photo
+    Route::delete('/document-requests/{id}/photo', [App\Http\Controllers\DocumentRequestController::class, 'deletePhoto']); // Delete photo (admin only)
+});
+
+// Direct profile update routes as fallback (outside middleware group for testing)
+Route::post('/profile/update-fallback', [ResidentProfileController::class, 'update'])->middleware('auth:sanctum');
+Route::put('/profile/update-fallback', [ResidentProfileController::class, 'update'])->middleware('auth:sanctum');
+Route::patch('/profile/update-fallback', [ResidentProfileController::class, 'update'])->middleware('auth:sanctum');
+Route::get('/profile/update', function() {
+    return response()->json(['message' => 'Profile update endpoint is working. Use POST, PUT, or PATCH method to update.'], 200);
+})->middleware('auth:sanctum');
+
+// Debug route to check user profile status
+Route::get('/profile/debug', function(Request $request) {
+    $user = $request->user();
+    $resident = \App\Models\Resident::where('user_id', $user->id)->first();
+    
+    return response()->json([
+        'user_id' => $user->id,
+        'user_email' => $user->email,
+        'has_resident' => $resident ? true : false,
+        'resident_id' => $resident ? $resident->id : null,
+        'has_profile' => $resident && $resident->profile ? true : false,
+        'profile_id' => $resident && $resident->profile ? $resident->profile->id : null,
+    ]);
+})->middleware('auth:sanctum');
+
+// Additional fallback routes for profile operations (outside all middleware groups)
+// These are already defined above, removing duplicates
+
+// Debug route for profile endpoint (outside auth middleware for testing)
+Route::get('/profile/test', function() {
+    return response()->json([
+        'message' => 'Profile endpoint is accessible',
+        'timestamp' => now(),
+        'auth_required' => true
+    ]);
+});
+
+// Simple test route to verify API is working
+Route::get('/test-api', function() {
+    return response()->json([
+        'message' => 'API is working!',
+        'timestamp' => now(),
+        'routes_available' => [
+            '/profile/update',
+            '/profile/update-fallback',
+            '/residents/complete-profile',
+            '/residents/complete-profile-fallback'
+        ]
+    ]);
 });
 
 Route::middleware(['auth:sanctum', 'admin'])->group(function () {
